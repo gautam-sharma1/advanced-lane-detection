@@ -1,8 +1,9 @@
 # __author__: Gautam Sharma
 # data:10/12/21
+import matplotlib.pyplot as plt
 import numpy as np
 import cv2 as cv2
-
+from numpy.linalg import inv
 class Preprocess:
     def __init__(self, hough_rho=1, hough_theta = np.pi/180, hough_threshold=13, hough_min_length=50, hough_max_line_gap = 10,\
             canny_low_thresh = 78, canny_high_thresh = 114, canny_kernel_size = 11, sobel_kernel_size = 9, sobel_thresh_min = 55,\
@@ -37,7 +38,26 @@ class Preprocess:
         self.video_path = '../data/video_1.mp4'
         self.edges = None
         self.masked_edges = None
+        self.src = np.float32(
+            [[350,550],
+             [600,550],
+            [750,650],
+             [350, 650]]
+        )
 
+        self.dst = np.float32(
+            [[200,0],
+             [800,0],
+             [800,700],
+             [200,700]]
+        )
+
+        self.dst2 = np.float32(
+            [[0,0],
+             [1080,0],
+             [1080,720],
+             [0,720]]
+        )
 
     def __repr__(self):
         return repr('Preprocessing Class')
@@ -91,23 +111,16 @@ class Preprocess:
         img_size = (image.shape[1], image.shape[0])
 
         # TODO: change this depending upon camera output
-        src = np.float32(
-            [[623,450],
-             [760,570],
-             [200,570],
-             [519,450]]
-        )
-        dst = np.float32(
-            [[800,0],
-             [800,570],
-             [400,570],
-             [400,0]]
-        )
-        M = cv2.getPerspectiveTransform(src, dst)
-        warped = cv2.warpPerspective(image, M, img_size, flags=cv2.INTER_CUBIC)
+
+        self.M = cv2.getPerspectiveTransform(self.src, self.dst)
+        warped = cv2.warpPerspective(image, self.M, img_size, flags=cv2.INTER_CUBIC)
         return warped
 
-
+    def getReversePerspectiveTransform(self,image):
+        img_size = (image.shape[1], image.shape[0])
+        #M = cv2.getPerspectiveTransform(self.dst, self.src)
+        M_inv = inv(self.M)
+        return cv2.warpPerspective(image, M_inv, img_size, flags=cv2.INTER_CUBIC)
 
     def sobel(self, image):
         """
@@ -120,9 +133,7 @@ class Preprocess:
         sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0,self.sobel_kernel_size)
         sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1,self.sobel_kernel_size)
         abs_sobel = np.sqrt(sobelx**2 + sobely**2)
-
         scaled_sobel = np.uint8(255*abs_sobel/np.max(abs_sobel))
-
         binary = np.zeros_like(scaled_sobel)
 
         # mask the lane region by white pixels
@@ -133,11 +144,11 @@ class Preprocess:
         # input()
         # mask the region that is not lanes by 0 i.e. black pixels
         # TODO: change this depending upon camera output
-        binary[:, :300] = 0
+        binary[:, :200] = 0
         binary[:, 870:] = 0
         #binary[:,450:750] = 0
-        binary[:550,:] = 0
-        binary[670:, :] = 0
+        binary[:200,:] = 0
+        # binary[670:, :] = 0
 
         return binary
 
@@ -162,7 +173,6 @@ class Preprocess:
 
         hls = cv2.cvtColor(image, cv2.COLOR_BGR2HLS)
 
-
         R = image[:,:,2]
         H = hls[:,:,0]
         L = hls[:,:,1]
@@ -181,14 +191,12 @@ class Preprocess:
         binary_L[(L > thresh_L[0]) & (L <= thresh_L[1])] = 1
         binary_R[(R > thresh_R[0]) & (R <= thresh_R[1])] = 1
 
-
-
         net_img = binary_R + binary_L + binary_S
-        net_img[:, :300] = 0
+        net_img[:, :200] = 0
         net_img[:, 870:] = 0
         #binary[:,450:750] = 0
-        net_img[:550,:] = 0
-        net_img[670:, :] = 0
+        net_img[:200,:] = 0
+        # net_img[670:, :] = 0
         return net_img
 
     @staticmethod
@@ -218,11 +226,15 @@ class Preprocess:
             ret, frame = cap.read()
             print(frame.shape)
             if ret == True:
-                line_edges1 = 255*self.sobel(frame)
-                line_edges2 = 255*self.hueLightSaturation(frame)
+                warped = self.getPerspectiveTransform(frame)
+
+
+                line_edges1 = 255*self.sobel(warped)
+                line_edges2 = 255*self.hueLightSaturation(line_edges1)
+
                 #input()
 
-                cv2.imshow("frame", line_edges1+line_edges2)
+                cv2.imshow("frame", line_edges2)
 
                 # Press Q on keyboard to  exit
                 if cv2.waitKey(25) & 0xFF == ord('q'):

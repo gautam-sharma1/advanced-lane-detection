@@ -109,8 +109,16 @@ class LaneDetection:
         leftx, lefty, rightx, righty, out_img, out_img_original = self.findLanePixels(binary_warped)
 
         # Fit a second order polynomial to each using `np.polyfit`
-        left_fit = np.polyfit(lefty, leftx, 2)
-        right_fit = np.polyfit(righty, rightx, 2)
+        if len(leftx) > 1 and len(lefty) > 1:
+            left_fit = np.polyfit(lefty, leftx, 2)
+        else:
+            print("No lane to fit")
+            return
+        if len(rightx) > 1 and len(righty) > 1:
+            right_fit = np.polyfit(righty, rightx, 2)
+        else:
+            print("No lane to fit")
+            return
 
         # Generate x and y values for plotting
         ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0])
@@ -127,6 +135,74 @@ class LaneDetection:
         return left_fitx, right_fitx, ploty, out_img_original
 
 
+    def readVideoStream(self):
+        cap = cv2.VideoCapture(self.preprocess.video_path)
+        # Check if camera opened successfully
+        if (cap.isOpened()== False):
+            print("Error opening video stream or file")
+
+        # Read until video is completed
+        while(cap.isOpened()):
+            # Capture frame-by-frame
+            ret, frame = cap.read()
+            print(frame.shape)
+            if ret == True:
+
+                warped = self.preprocess.getPerspectiveTransform(frame)
+
+
+                #line_edges1 = 255*self.preprocess.sobel(warped)
+                line_edges2 = 255*self.preprocess.hueLightSaturation(warped)
+
+                try:
+                    left_fitx, right_fitx, ploty, out_img_original = ld.fit_polynomial(line_edges2)
+
+                except:
+                    print("No line detected! ")
+                    continue
+
+                for i in range(len(ploty)):
+                    cv2.circle(warped, (int(left_fitx[i]), int(ploty[i])), 3,255)
+                    cv2.circle(warped, (int(right_fitx[i]), int(ploty[i])), 3,255)
+                cv2.transform(warped, self.preprocess.M)
+                #input()
+                reverse_perspective = self.preprocess.getReversePerspectiveTransform(warped)
+
+                cv2.imshow("frame", reverse_perspective)
+
+                # Press Q on keyboard to  exit
+                if cv2.waitKey(25) & 0xFF == ord('q'):
+                    break
+
+            # Break the loop
+            else:
+                break
+
+        # When everything done, release the video capture object
+        cap.release()
+
+        # Closes all the frames
+        cv2.destroyAllWindows()
+
+
 
 if __name__ == "__main__":
-    ld = LaneDetection(hough_rho=20)
+    ld = LaneDetection()
+    ld.readVideoStream()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
